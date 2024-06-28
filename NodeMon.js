@@ -30,7 +30,8 @@ async function createSettingsFile() {
     smtpHost: await question("Enter the SMTP host for sending emails: "),
     smtpPort: parseInt(await question("Enter the SMTP port (default: 587): ")) || 587,
     smtpUser: await question("Enter the SMTP username: "),
-    smtpPass: await question("Enter the SMTP password: ")
+    smtpPass: await question("Enter the SMTP password: "),
+    localPath: await question("Enter the local path where the repository should be cloned (default: ./repo): ") || "./repo"
   };
 
   fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 2));
@@ -76,9 +77,26 @@ function getLatestCommit() {
   });
 }
 
+function cloneRepository() {
+  return new Promise((resolve, reject) => {
+    const repoUrl = `https://github.com/${settings.repoOwner}/${settings.repoName}.git`;
+    console.log(`Cloning repository from ${repoUrl} to ${settings.localPath}...`);
+    exec(`git clone -b ${settings.branch} ${repoUrl} ${settings.localPath}`, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Error cloning repository: ${error}`);
+        reject(error);
+        return;
+      }
+      console.log(`Repository cloned successfully: ${stdout}`);
+      if (stderr) console.error(`stderr: ${stderr}`);
+      resolve();
+    });
+  });
+}
+
 function pullChanges() {
   return new Promise((resolve, reject) => {
-    exec(`git pull origin ${settings.branch}`, (error, stdout, stderr) => {
+    exec(`git -C ${settings.localPath} pull origin ${settings.branch}`, (error, stdout, stderr) => {
       if (error) {
         console.error(`Error pulling changes: ${error}`);
         reject(error);
@@ -93,13 +111,14 @@ function pullChanges() {
 
 function installDependencies() {
   return new Promise((resolve, reject) => {
-    if (!fs.existsSync(REQUIRED_FILE)) {
+    const requiredFilePath = path.join(settings.localPath, REQUIRED_FILE);
+    if (!fs.existsSync(requiredFilePath)) {
       console.log('No required.txt file found. Skipping dependency installation.');
       resolve('No new dependencies.');
       return;
     }
 
-    const modules = fs.readFileSync(REQUIRED_FILE, 'utf8').split('\n').filter(module => module.trim() !== '');
+    const modules = fs.readFileSync(requiredFilePath, 'utf8').split('\n').filter(module => module.trim() !== '');
     
     if (modules.length === 0) {
       console.log('required.txt is empty. Skipping dependency installation.');
@@ -108,7 +127,7 @@ function installDependencies() {
     }
 
     console.log('Installing dependencies...');
-    exec(`npm install ${modules.join(' ')}`, (error, stdout, stderr) => {
+    exec(`cd ${settings.localPath} && npm install ${modules.join(' ')}`, (error, stdout, stderr) => {
       if (error) {
         console.error(`Error installing dependencies: ${error}`);
         reject(error);
@@ -128,7 +147,7 @@ function startApp() {
   }
   
   console.log(`Starting ${settings.appFile}...`);
-  appProcess = spawn('node', [settings.appFile], { stdio: 'inherit' });
+  appProcess = spawn('node', [path.join(settings.localPath, settings.appFile)], { stdio: 'inherit' });
   
   appProcess.on('close', (code) => {
     console.log(`Child process exited with code ${code}`);
@@ -214,6 +233,17 @@ async function checkForChanges() {
 async function main() {
   settings = await loadSettings();
   rl.close();
+
+  // Check if repository exists locally, if not, clone it
+  if (!fs.existsSync(settings.localPath)) {
+    console.log(`Repository not found at ${settings.localPath}`);
+    try {
+      await cloneRepository();
+    } catch (error) {
+      console.error(`Failed to clone repository: ${error}`);
+      process.exit(1);
+    }
+  }
 
   // Initial check and start
   checkForChanges();
