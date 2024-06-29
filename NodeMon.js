@@ -80,8 +80,8 @@ function getLatestCommit() {
 function cloneRepository() {
   return new Promise((resolve, reject) => {
     const repoUrl = `https://github.com/${settings.repoOwner}/${settings.repoName}.git`;
-    console.log(`Cloning repository from ${repoUrl} to ${settings.localPath}...`);
-    exec(`git clone -b ${settings.branch} ${repoUrl} ${settings.localPath}`, (error, stdout, stderr) => {
+    console.log(`Cloning repository from ${repoUrl}`);
+    exec(`git clone -b ${settings.branch} ${repoUrl} ./`, (error, stdout, stderr) => {
       if (error) {
         console.error(`Error cloning repository: ${error}`);
         reject(error);
