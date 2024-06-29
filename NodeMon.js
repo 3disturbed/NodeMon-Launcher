@@ -147,6 +147,9 @@ function startApp() {
   }
   
   console.log(`Starting ${settings.appFile}...`);
+  // change working directory to the app directory
+  process.chdir(settings.localPath);
+  
   appProcess = spawn('node', [path.join(settings.localPath, settings.appFile)], { stdio: 'inherit' });
   
   appProcess.on('close', (code) => {
